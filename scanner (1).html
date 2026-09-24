@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Scanner QR Muda-Mudi</title>
+
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+
+    .container {
+      width: min(100%, 620px);
+      margin: 0 auto;
+      padding: 18px;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 8px 25px rgba(15, 23, 42, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 22px;
+    }
+
+    .subtitle {
+      color: #64748b;
+      font-size: 14px;
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+
+    #reader {
+      width: 100%;
+      min-height: 260px;
+      overflow: hidden;
+      border-radius: 16px;
+      background: #0f172a;
+    }
+
+    #reader video {
+      width: 100% !important;
+      border-radius: 16px;
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 13px 14px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    #startButton {
+      background: #06b6d4;
+      color: white;
+    }
+
+    #stopButton {
+      background: #ef4444;
+      color: white;
+    }
+
+    #closeButton {
+      width: 100%;
+      margin-top: 10px;
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+
+    .status {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 12px;
+      background: #f1f5f9;
+      color: #475569;
+      font-size: 14px;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    .status.error {
+      background: #fef2f2;
+      color: #b91c1c;
+    }
+
+    .status.success {
+      background: #ecfdf5;
+      color: #047857;
+    }
+
+    .result {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      background: #ecfeff;
+      color: #155e75;
+      word-break: break-word;
+      display: none;
+    }
+
+    .help {
+      margin-top: 14px;
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 480px) {
+      .container {
+        padding: 10px;
+      }
+
+      .card {
+        padding: 12px;
+      }
+
+      .buttons {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+
+    <div class="card">
+
+      <h1>Scanner QR Muda-Mudi</h1>
+
+      <div class="subtitle">
+        Tekan <b>Nyalakan Kamera</b> untuk meminta izin kamera.
+        Setelah QR terbaca, ID peserta akan dikirim kembali ke aplikasi absensi.
+      </div>
+
+      <div id="reader"></div>
+
+      <div class="buttons">
+
+        <button
+          id="startButton"
+          type="button"
+          onclick="startCamera()"
+        >
+          Nyalakan Kamera
+        </button>
+
+        <button
+          id="stopButton"
+          type="button"
+          onclick="stopCamera()"
+          disabled
+        >
+          Matikan Kamera
+        </button>
+
+      </div>
+
+      <button
+        id="closeButton"
+        type="button"
+        onclick="closeScanner()"
+      >
+        Tutup Scanner
+      </button>
+
+      <div
+        id="status"
+        class="status"
+      >
+        Kamera belum aktif. Tekan "Nyalakan Kamera".
+      </div>
+
+      <div
+        id="result"
+        class="result"
+      ></div>
+
+      <div class="help">
+        Pastikan halaman ini dibuka melalui HTTPS.
+        Pada HP, gunakan kamera belakang bila tersedia.
+        Pada laptop, gunakan webcam.
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <script>
+
+    const params =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    /*
+     * Origin halaman Apps Script yang membuka scanner.
+     * Dikirim dari index.html melalui query string.
+     */
+    const returnOrigin =
+      params.get('returnOrigin') || '';
+
+    let scanner = null;
+    let scannerRunning = false;
+    let processingScan = false;
+
+
+    function setStatus(
+      message,
+      type = ''
+    ) {
+
+      const status =
+        document.getElementById('status');
+
+      status.textContent =
+        message;
+
+      status.className =
+        'status' +
+        (type ? ' ' + type : '');
+
+    }
+
+
+    function setButtons() {
+
+      document.getElementById(
+        'startButton'
+      ).disabled =
+        scannerRunning;
+
+      document.getElementById(
+        'stopButton'
+      ).disabled =
+        !scannerRunning;
+
+    }
+
+
+    async function startCamera() {
+
+      if (scannerRunning) {
+        return;
+      }
+
+      if (
+        typeof Html5Qrcode ===
+        'undefined'
+      ) {
+
+        setStatus(
+          'Library scanner tidak berhasil dimuat. Periksa koneksi internet.',
+          'error'
+        );
+
+        return;
+      }
+
+      if (!window.isSecureContext) {
+
+        setStatus(
+          'Scanner harus dibuka melalui HTTPS agar kamera dapat digunakan.',
+          'error'
+        );
+
+        return;
+      }
+
+      setStatus(
+        'Meminta izin kamera...',
+        ''
+      );
+
+      try {
+
+        scanner =
+          new Html5Qrcode(
+            'reader'
+          );
+
+        const config = {
+          fps: 10,
+          qrbox: {
+            width: 250,
+            height: 250
+          },
+          aspectRatio: 1.0
+        };
+
+        /*
+         * Pertama coba kamera environment.
+         * Ini biasanya kamera belakang pada HP.
+         */
+        try {
+
+          await scanner.start(
+            {
+              facingMode:
+                'environment'
+            },
+            config,
+            onScanSuccess,
+            onScanFailure
+          );
+
+        } catch (environmentError) {
+
+          /*
+           * Fallback untuk laptop/webcam
+           * atau browser yang tidak menyediakan
+           * facingMode environment.
+           */
+          const cameras =
+            await Html5Qrcode.getCameras();
+
+          if (
+            !cameras ||
+            cameras.length === 0
+          ) {
+            throw environmentError;
+          }
+
+          let selectedCamera =
+            cameras.find(camera =>
+              /back|rear|environment|belakang/i
+                .test(
+                  camera.label || ''
+                )
+            );
+
+          if (!selectedCamera) {
+            selectedCamera =
+              cameras[0];
+          }
+
+          await scanner.start(
+            selectedCamera.id,
+            config,
+            onScanSuccess,
+            onScanFailure
+          );
+
+        }
+
+        scannerRunning = true;
+
+        setButtons();
+
+        setStatus(
+          'Kamera aktif. Arahkan QR Code ke kotak scan.',
+          ''
+        );
+
+      } catch (error) {
+
+        console.error(
+          'Camera start error:',
+          error
+        );
+
+        scanner = null;
+        scannerRunning = false;
+
+        setButtons();
+
+        let message =
+          'Kamera tidak dapat digunakan.';
+
+        if (
+          error &&
+          /permission|notallowed|denied/i
+            .test(
+              String(
+                error.message ||
+                error
+              )
+            )
+        ) {
+          message =
+            'Izin kamera ditolak. Izinkan kamera pada browser lalu tekan Nyalakan Kamera lagi.';
+        } else if (
+          !window.isSecureContext
+        ) {
+          message =
+            'Halaman scanner harus menggunakan HTTPS.';
+        } else if (
+          error &&
+          error.message
+        ) {
+          message =
+            error.message;
+        }
+
+        setStatus(
+          message,
+          'error'
+        );
+
+      }
+
+    }
+
+
+    async function stopCamera() {
+
+      if (!scanner) {
+        scannerRunning = false;
+        setButtons();
+        return;
+      }
+
+      try {
+
+        if (scannerRunning) {
+          await scanner.stop();
+        }
+
+      } catch (error) {
+
+        console.warn(
+          'Scanner stop error:',
+          error
+        );
+
+      }
+
+      try {
+        scanner.clear();
+      } catch (error) {
+        console.warn(
+          'Scanner clear error:',
+          error
+        );
+      }
+
+      scanner = null;
+      scannerRunning = false;
+      processingScan = false;
+
+      setButtons();
+
+      setStatus(
+        'Kamera dimatikan. Tekan "Nyalakan Kamera" untuk scan lagi.',
+        ''
+      );
+
+    }
+
+
+    function onScanFailure() {
+      /*
+       * Error decoding frame sengaja diabaikan
+       * agar status tidak berkedip setiap frame.
+       */
+    }
+
+
+    function onScanSuccess(
+      decodedText
+    ) {
+
+      if (
+        processingScan
+      ) {
+        return;
+      }
+
+      const id =
+        String(
+          decodedText || ''
+        ).trim();
+
+      if (!id) {
+        return;
+      }
+
+      processingScan = true;
+
+      /*
+       * Hentikan kamera setelah satu QR
+       * agar satu QR tidak tersimpan berkali-kali.
+       */
+      stopCamera()
+        .finally(() => {
+
+          showResult(
+            id
+          );
+
+          sendToParent(
+            id
+          );
+
+        });
+
+    }
+
+
+    function showResult(id) {
+
+      const result =
+        document.getElementById(
+          'result'
+        );
+
+      result.style.display =
+        'block';
+
+      result.textContent =
+        'QR terbaca. ID peserta: ' +
+        id;
+
+      setStatus(
+        'QR berhasil dibaca dan dikirim ke aplikasi absensi.',
+        'success'
+      );
+
+    }
+
+
+    function sendToParent(id) {
+
+      if (
+        !window.opener ||
+        window.opener.closed
+      ) {
+
+        setStatus(
+          'QR terbaca, tetapi halaman aplikasi utama tidak ditemukan. Salin ID secara manual: ' + id,
+          'error'
+        );
+
+        return;
+
+      }
+
+      if (!returnOrigin) {
+
+        setStatus(
+          'QR terbaca, tetapi alamat kembali aplikasi tidak tersedia.',
+          'error'
+        );
+
+        return;
+
+      }
+
+      /*
+       * Kirim hanya ke origin Apps Script
+       * yang diberikan oleh halaman utama.
+       */
+      window.opener.postMessage(
+        {
+          source:
+            'muda-mudi-external-qr-scanner',
+          type: 'qr',
+          id: id
+        },
+        returnOrigin
+      );
+
+    }
+
+
+    function closeScanner() {
+
+      try {
+        window.close();
+      } catch (error) {
+        console.warn(error);
+      }
+
+      /*
+       * Jika browser tidak mengizinkan
+       * window.close(), matikan kamera saja.
+       */
+      if (
+        scannerRunning ||
+        scanner
+      ) {
+        stopCamera();
+      }
+
+    }
+
+
+    /*
+     * Saat tab ditutup/dipindahkan,
+     * pastikan kamera dihentikan.
+     */
+    window.addEventListener(
+      'beforeunload',
+      () => {
+
+        if (
+          scanner &&
+          scannerRunning
+        ) {
+          try {
+            scanner.stop();
+          } catch (error) {
+            console.warn(error);
+          }
+        }
+
+      }
+    );
+
+    setButtons();
+
+  </script>
+
+</body>
+</html>
