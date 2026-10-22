@@ -329,20 +329,31 @@
 
     function sendToParent(idPeserta) {
       try {
+        const cleanId = String(idPeserta || '').trim();
+        if (!cleanId) throw new Error('ID peserta kosong.');
+
+        // Kirim dua nama properti protokol agar kompatibel dengan Index.html lama dan baru.
+        // Gunakan '*' sebagai targetOrigin karena Google Apps Script HTML Service dapat
+        // menjalankan halaman dalam sandbox dengan origin yang berbeda dari URL /exec.
+        // Index.html tetap memverifikasi event.origin terhadap domain GitHub Pages.
         const payload = {
           source: 'muda-mudi-external-qr-scanner',
-          id: String(idPeserta).trim()
+          type: 'QR_SCAN_RESULT',
+          id: cleanId,
+          idPeserta: cleanId
         };
-        // Saat embedded kirim ke parent; saat dibuka di tab baru kirim ke window.opener.
+
         if (window.parent && window.parent !== window) {
-          window.parent.postMessage(payload, returnOrigin);
+          window.parent.postMessage(payload, '*');
         } else if (window.opener && !window.opener.closed) {
-          window.opener.postMessage(payload, returnOrigin);
+          window.opener.postMessage(payload, '*');
         } else {
-          throw new Error('Halaman absensi asal tidak ditemukan. Buka scanner dari tombol pada aplikasi absensi.');
+          throw new Error('Scanner tidak terhubung ke aplikasi absensi. Buka scanner menggunakan tombol "Buka di Tab Baru" pada aplikasi, bukan dari tautan langsung.');
         }
-        setStatus('QR berhasil dibaca. Mengirim data...');
-        showResult('ID Peserta: ' + String(idPeserta).trim());
+
+        setStatus('QR berhasil dibaca. Mengirim ID peserta ke aplikasi absensi...');
+        showResult('ID Peserta: ' + cleanId + '\nMenunggu konfirmasi dari aplikasi absensi.');
+        console.info('QR_SCAN_RESULT sent to attendance app:', cleanId, 'returnOrigin:', returnOrigin);
       } catch (error) {
         console.error('Gagal mengirim hasil scan:', error);
         setStatus(error && error.message ? error.message : 'QR terbaca, tetapi gagal mengirim data.');
