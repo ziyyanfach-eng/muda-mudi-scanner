@@ -52,9 +52,9 @@
 
       justify-content: center;
 
-      align-items: flex-start;
+      align-items: center;
 
-      padding: 10px;
+      padding: 20px;
     }
 
 
@@ -62,13 +62,13 @@
 
       width: 100%;
 
-      max-width: 640px;
+      max-width: 480px;
 
       background: #ffffff;
 
       border-radius: 20px;
 
-      padding: 14px;
+      padding: 24px;
 
       box-shadow:
         0 15px 40px
@@ -83,7 +83,7 @@
       margin:
         0 0 8px;
 
-      font-size: 20px;
+      font-size: 24px;
 
       color: #111827;
     }
@@ -324,20 +324,45 @@
      * ========================================================
      */
 
-    const params = new URLSearchParams(window.location.search);
-    const returnOrigin = params.get('returnOrigin') || '*';
-
     function sendToParent(idPeserta) {
+
       try {
-        window.parent.postMessage({
-          source: 'muda-mudi-external-qr-scanner',
-          id: String(idPeserta).trim()
-        }, returnOrigin);
-        setStatus('QR berhasil dibaca. Mengirim data...');
-        showResult('ID Peserta: ' + String(idPeserta).trim());
+
+        window.parent.postMessage(
+
+          {
+            type:
+              'QR_SCAN_RESULT',
+
+            idPeserta:
+              String(idPeserta).trim()
+          },
+
+          '*'
+        );
+
+
+        setStatus(
+          'QR berhasil dibaca. Mengirim data...'
+        );
+
+
+        showResult(
+          'ID Peserta: ' +
+          String(idPeserta).trim()
+        );
+
+
       } catch (error) {
-        console.error('Gagal mengirim hasil scan:', error);
-        setStatus('QR terbaca, tetapi gagal mengirim data.');
+
+        console.error(
+          'Gagal mengirim hasil scan:',
+          error
+        );
+
+        setStatus(
+          'QR terbaca, tetapi gagal mengirim data.'
+        );
       }
     }
 
@@ -894,3 +919,4 @@
 </body>
 
 </html>
+
